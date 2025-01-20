@@ -35,13 +35,31 @@ from kittycad.models import (
     ApiCallStatus,
     Error,
     FileExportFormat,
+    FileImportFormat,
     TextToCad,
     TextToCadCreateBody,
+    FileConversion
 )
+from typing import Dict
+
+from kittycad.api.file import create_file_conversion
+from kittycad.models.base64data import Base64Data
+from kittycad.types import Unset
 
 from fastapi import FastAPI, Request
 
-    
+
+# from pydantic import BaseModel
+
+# class Model(BaseModel):
+#     model_name: str = None
+
+# class Msg():
+#     status:int = 0
+#     content:str = ''
+#     description:str = ''
+#     error:str = ''
+
 @app.get("/text_to_cad")
 async def text_to_cad(prompt: str, token: str, file_export_format: str):
     # Create our client.
@@ -60,9 +78,9 @@ async def text_to_cad(prompt: str, token: str, file_export_format: str):
     if isinstance(response, Error) or response is None:
         print(f"Error: {response}")
         return {
-            "error":f"转换出现错误: {response}",
+            "error": f"转换出现错误: {response}",
         }
-    
+
     result: TextToCad = response
 
     # Polling to check if the task is complete
@@ -79,23 +97,23 @@ async def text_to_cad(prompt: str, token: str, file_export_format: str):
         if isinstance(response, Error) or response is None:
             print(f"Error: {response}")
             return {
-                "error":f"转换出现错误: {response}",
+                "error": f"转换出现错误: {response}",
             }
 
         result = response
-    
+
     if result.status == ApiCallStatus.FAILED:
         # Print out the error message
         print(f"Text-to-CAD failed: {result.error}")
         return {
-            "error":f"转换出现错误: {result.error}",
+            "error": f"转换出现错误: {result.error}",
         }
 
     elif result.status == ApiCallStatus.COMPLETED:
         if result.outputs is None:
             print("Text-to-CAD completed but returned no files.")
             return {
-                "error":f"转换出现错误，没有文件返回",
+                "error": f"转换出现错误，没有文件返回",
             }
 
         # Print out the names of the generated files
@@ -104,22 +122,58 @@ async def text_to_cad(prompt: str, token: str, file_export_format: str):
             print(f"  * {name}")
 
         # Save the STEP data as text-to-cad-output.step
-        final_result = result.outputs["source.step"]
+        # final_result = result.outputs["source.step"]
+        final_result = result.outputs["source." + file_export_format]
         timestamp_ms = str(int(time.time() * 1000))
-        with open(timestamp_ms + ".step", "w", encoding="utf-8") as output_file:
+        # with open(timestamp_ms + ".step", "w", encoding="utf-8") as output_file:
+        with open(timestamp_ms + "." + file_export_format, "w", encoding="utf-8") as output_file:
             output_file.write(final_result.decode("utf-8"))
             print(f"Saved output to {output_file.name}")
-            
+
+    # 转换为fbx文件
+    if file_export_format != "fbx":
+        # 读取 .step 文件内容
+        with open(timestamp_ms + "." + file_export_format, "rb") as file:
+            step_content = file.read()
+
+        # 转换 .step 到 .fbx
+        result_fbx = create_file_conversion.sync(
+            client=client,
+            body=step_content,
+            src_format=FileImportFormat.STEP,
+            output_format=FileExportFormat.FBX,
+        )
+
+        if isinstance(result_fbx, Error) or result_fbx is None:
+            return {"error": "转换 STEP 到 FBX 失败"}
+
+        fc_fbx: FileConversion = result_fbx
+
+        if isinstance(fc_fbx.outputs, Unset) or fc_fbx.outputs is None:
+            return {"error": "FBX 转换输出为空"}
+
+        outputs_fbx: Dict[str, Base64Data] = fc_fbx.outputs
+        if len(outputs_fbx) != 1:
+            return {"error": "FBX 转换输出数量不符"}
+
+        # 保存 .fbx 文件
+        fbx_file_path = timestamp_ms + ".fbx"
+        for _, output in outputs_fbx.items():
+            with open(fbx_file_path, "wb") as output_file:
+                output_file.write(output)
+
     return {
-        "url":"http://localhost:5771/download?file_path=" + timestamp_ms + ".step",
+        "download_url": "http://localhost:5771/download?file_path=" + timestamp_ms + "." + file_export_format,
+        "view_url": "http://localhost:5771/download?file_path=" + timestamp_ms + ".fbx"
     }
 
+
 from fastapi.responses import FileResponse
+
+
 @app.get("/download")
 async def download_file(file_path):
     return FileResponse(file_path, filename=file_path, media_type="application/octet-stream")
-
-
 
 if __name__ == '__main__':
     uvicorn.run(app, host="0.0.0.0", port=5771)

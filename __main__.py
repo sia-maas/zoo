@@ -195,5 +195,24 @@ from fastapi.responses import FileResponse
 async def download_file(file_path):
     return FileResponse(file_path, filename=file_path, media_type="application/octet-stream")
 
+from typing import Optional, Union
+from kittycad.api.users import get_user_self
+from kittycad.models import Error, User
+@app.get("/test")
+async def test(url: str, token: str):
+    # 创建客户端实例（从环境变量加载 Token）
+    client = Client(token=token)
+
+    # 调用 API 获取当前用户的信息
+    result: Optional[Union[User, Error]] = get_user_self.sync(
+        client=client,
+    )
+
+    # 如果结果是 Error 或者为 None，抛出异常
+    if isinstance(result, Error) or result is None:
+        return {"code": 500, "message": "Invalid token"}
+    # 如果请求成功，返回的结果是 User 对象，打印用户信息
+    return {"code": 200, "message": "Token is valid."}
+
 if __name__ == '__main__':
     uvicorn.run(app, host="0.0.0.0", port=5771)

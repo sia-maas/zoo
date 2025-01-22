@@ -61,7 +61,7 @@ from fastapi import FastAPI, Request
 #     error:str = ''
 
 @app.get("/text_to_cad")
-async def text_to_cad(prompt: str, token: str, file_export_format: str):
+async def text_to_cad(prompt: str, token: str, file_export_format: str, url: str):
     # Create our client.
     # client = ClientFromEnv()
     client = Client(token=token)
@@ -184,15 +184,13 @@ async def text_to_cad(prompt: str, token: str, file_export_format: str):
                 output_file.write(output)
 
     return {
-        "download_url": "http://localhost:5771/download?file_path=" + timestamp_ms + "." + file_export_format,
-        "view_url": "http://localhost:5771/download?file_path=" + timestamp_ms + ".fbx",
+        "download_url": url + "/download?file_path=" + timestamp_ms + "." + file_export_format,
+        "view_url": url + "/download?file_path=" + timestamp_ms + ".fbx",
         "cost": f"模型生成费用: ${cost:.2f}"
     }
 
 
 from fastapi.responses import FileResponse
-
-
 @app.get("/download")
 async def download_file(file_path):
     return FileResponse(file_path, filename=file_path, media_type="application/octet-stream")

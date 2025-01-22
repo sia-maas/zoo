@@ -65,6 +65,10 @@ async def text_to_cad(prompt: str, token: str, file_export_format: str):
     # Create our client.
     # client = ClientFromEnv()
     client = Client(token=token)
+
+    # 记录开始时间
+    start_time = time.time()
+
     # Prompt the API to generate a 3D model from text.
     response = create_text_to_cad.sync(
         client=client,
@@ -116,6 +120,23 @@ async def text_to_cad(prompt: str, token: str, file_export_format: str):
                 "error": f"转换出现错误，没有文件返回",
             }
 
+            # 记录结束时间并计算耗时
+            end_time = time.time()
+            elapsed_time = end_time - start_time  # 计算模型生成的时间
+            print(f"模型生成耗时: {elapsed_time:.2f}秒")
+
+            # 计算花费
+            if elapsed_time < 10:
+                # 如果耗时小于10秒，则免费
+                cost = 0.0
+            else:
+                # 否则根据分钟数来计算费用
+                # 四舍五入到最接近的分钟
+                minutes = round(elapsed_time / 60)
+                # 每分钟收费0.50美元
+                cost = minutes * 0.50
+            print(f"模型生成费用: ${cost:.2f}")
+
         # Print out the names of the generated files
         print(f"Text-to-CAD completed and returned {len(result.outputs)} files:")
         for name in result.outputs:
@@ -164,7 +185,8 @@ async def text_to_cad(prompt: str, token: str, file_export_format: str):
 
     return {
         "download_url": "http://localhost:5771/download?file_path=" + timestamp_ms + "." + file_export_format,
-        "view_url": "http://localhost:5771/download?file_path=" + timestamp_ms + ".fbx"
+        "view_url": "http://localhost:5771/download?file_path=" + timestamp_ms + ".fbx",
+        "cost": f"模型生成费用: ${cost:.2f}"
     }
 
 
